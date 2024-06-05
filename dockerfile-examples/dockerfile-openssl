@@ -1,0 +1,13 @@
+FROM keyfactor.jfrog.io/signum-con-release/keyfactor/signum-linux-agent:3.80.4-2024052902
+USER root
+WORKDIR /etc/keyfactor
+
+# OpenSSL Install
+# Configure OpenSSL
+RUN microdnf update -y && \
+    microdnf install openssl openssl-pkcs11 -y && \
+    microdnf clean all && \
+    rm -rf /var/cache/yum /var/cache/dnf && \
+    echo "module:/usr/lib/libkeyfactorpkcs11.so" > /usr/share/p11-kit/modules/keyfactor.module
+
+USER 10001

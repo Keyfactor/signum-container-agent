@@ -1,0 +1,34 @@
+FROM keyfactor.jfrog.io/signum-con-release/keyfactor/signum-linux-agent:3.80.4-2024052902
+
+USER root
+WORKDIR /etc/keyfactor
+# Check the Cosign Release page for the latest releases https://github.com/sigstore/cosign/releases
+ARG COSIGN_VERSION="v2.2.4"
+#Check for the latest release version at https://github.com/ebourg/jsign/releases
+ARG JSIGN_VERSION="6.0"
+
+# Add the cosign go binary (built with piv-pkcs11 support), to learn more about Cosign checkout https://github.com/sigstore/cosign
+RUN curl -LO --silent "https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-pivkey-pkcs11key-amd64"
+
+#Jsign is a Java implementation of Microsoft's Authenticode check out the project at https://github.com/ebourg/jsign 
+RUN curl -LO --silent "https://github.com/ebourg/jsign/releases/download/${JSIGN_VERSION}/jsign-${JSIGN_VERSION}.jar"
+
+# Java 17 and OpenSSL installation
+#Configure Signum Provider
+RUN microdnf update -y && \
+    microdnf install java-17-openjdk-devel openssl openssl-pkcs11  -y && \
+    microdnf clean all && \
+    rm -rf /var/cache/yum /var/cache/dnf && \
+    echo -e "name = KeyfactorPKCS11\nlibrary = /usr/lib/libkeyfactorpkcs11.so\ndescription = Keyfactor PKCS#11 interface for SmartCard" > /etc/keyfactor/keyfactorpkcs11.cfg \
+    echo "module:/usr/lib/libkeyfactorpkcs11.so" > /usr/share/p11-kit/modules/keyfactor.module
+
+RUN mkdir -p /opt/cosign/bin && \
+    mv /etc/keyfactor/cosign-linux-pivkey-pkcs11key-amd64 /opt/cosign/bin/cosign && \
+    chmod a+x /opt/cosign/bin/cosign && \
+    chown -R 10001:0 /opt/cosign && \
+    chgrp -R 0 /opt/cosign && \
+    chmod -R g=u /opt/cosign
+
+ENV PATH="/opt/cosign/bin:${JAVA_HOME}/bin:${PATH}"
+
+USER 10001

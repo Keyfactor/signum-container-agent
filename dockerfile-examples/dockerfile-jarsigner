@@ -1,0 +1,17 @@
+FROM keyfactor.jfrog.io/signum-con-release/keyfactor/signum-linux-agent:3.80.4-2024052902
+USER root
+WORKDIR /etc/keyfactor
+
+# Java 17 installation
+#Configure Signum Provider
+RUN microdnf update -y && \
+    microdnf install java-17-openjdk-devel -y && \
+    microdnf clean all && \
+    rm -rf /var/cache/yum /var/cache/dnf && \
+    echo -e "name = KeyfactorPKCS11\nlibrary = /usr/lib/libkeyfactorpkcs11.so\ndescription = Keyfactor PKCS#11 interface for SmartCard" > /etc/keyfactor/keyfactorpkcs11.cfg
+
+# Set PATH
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-17*
+ENV PATH=${PATH}:${JAVA_HOME}/bin
+
+USER 10001
