@@ -10,7 +10,7 @@ RUN microdnf update -y && \
     microdnf install java-17-openjdk-headless -y && \
     microdnf clean all && \
     rm -rf /var/cache/yum /var/cache/dnf && \
-    echo -e "name = KeyfactorPKCS11\nlibrary = /usr/lib/libkeyfactorpkcs11.so\ndescription = Keyfactor PKCS#11 interface for SmartCard" > /etc/keyfactor/keyfactorpkcs11.cfg
+    echo "name = KeyfactorPKCS11\nlibrary = /usr/lib/libkeyfactorpkcs11.so\ndescription = Keyfactor PKCS#11 interface for SmartCard" > /etc/keyfactor/keyfactorpkcs11.cfg
 
 #Jsign is a Java implementation of Microsoft's Authenticode check out the project at https://github.com/ebourg/jsign 
 RUN curl -LO --silent "https://github.com/ebourg/jsign/releases/download/${JSIGN_VERSION}/jsign-${JSIGN_VERSION}.jar"
