@@ -20,7 +20,7 @@ RUN microdnf update -y && \
     microdnf clean all && \
     rm -rf /var/cache/yum /var/cache/dnf && \
     echo -e "name = KeyfactorPKCS11\nlibrary = /usr/lib/libkeyfactorpkcs11.so\ndescription = Keyfactor PKCS#11 interface for SmartCard" > /etc/keyfactor/keyfactorpkcs11.cfg && \
-    echo -e "module:/usr/lib/libkeyfactorpkcs11.so" > /usr/share/p11-kit/modules/keyfactor.module
+    echo "module:/usr/lib/libkeyfactorpkcs11.so" > /usr/share/p11-kit/modules/keyfactor.module
 
 
 RUN mkdir -p /opt/cosign/bin && \
