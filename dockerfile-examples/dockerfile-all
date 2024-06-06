@@ -19,8 +19,8 @@ RUN microdnf update -y && \
     microdnf install java-17-openjdk-devel openssl openssl-pkcs11  -y && \
     microdnf clean all && \
     rm -rf /var/cache/yum /var/cache/dnf && \
-    echo "name = KeyfactorPKCS11\nlibrary = /usr/lib/libkeyfactorpkcs11.so\ndescription = Keyfactor PKCS#11 interface for SmartCard" > /etc/keyfactor/keyfactorpkcs11.cfg \
-    echo "module:/usr/lib/libkeyfactorpkcs11.so" > /usr/share/p11-kit/modules/keyfactor.module
+    echo -e "name = KeyfactorPKCS11\nlibrary = /usr/lib/libkeyfactorpkcs11.so\ndescription = Keyfactor PKCS#11 interface for SmartCard" > /etc/keyfactor/keyfactorpkcs11.cfg \
+    echo -e "module:/usr/lib/libkeyfactorpkcs11.so" > /usr/share/p11-kit/modules/keyfactor.module
 
 RUN mkdir -p /opt/cosign/bin && \
     mv /etc/keyfactor/cosign-linux-pivkey-pkcs11key-amd64 /opt/cosign/bin/cosign && \
