@@ -1,4 +1,4 @@
-FROM keyfactor.jfrog.io/signum-con-release/keyfactor/signum-linux-agent:3.80.4-2024052902
+FROM repo.keyfactor.com/images/signum-agent:latest
 USER root
 WORKDIR /etc/keyfactor
 #Check for the latest release version at https://github.com/ebourg/jsign/releases
