@@ -15,32 +15,32 @@ To report a problem or suggest a new feature, use the **[Issues](../../issues)**
 
 ## Running the Signum Container Agent Base Image
 ```sh
-docker run --name signum-agent -e "SIGNUM_HOSTNAME=A URL" -e "SIGNUM_CLIENTID=TheClientID" -e "SIGNUM_USERNAME=myuser@somedomain" -e "SIGNUM_PASSWORD=$mycreds" -e "SIGNUM_LOGLEVEL=HIGH" -e "SIGNUM_LOGTYPE=FILE" signum-agent-3.80.4-2024052302
+docker run --name signum-agent -e "SIGNUM_HOSTNAME=A URL" -e "SIGNUM_USERNAME=myuser@somedomain" -e "SIGNUM_PASSWORD=$mycreds" -e "SIGNUM_LOGLEVEL=HIGH" -e "SIGNUM_LOGTYPE=FILE" repo.keyfactor.com/images/signum-agent:4.60.2
 ```
 ```sh
 docker exec -it signum-agent /bin/bash
 ```
-```sh
-pkcs11-tool --module /usr/lib/libkeyfactorpkcs11.so --list-objects --type cert
+```
+signum-util lc
 ```
 ```
-Using slot 0 with a present token (0x0)
-Certificate Object; type = X.509 cert
-  label:      50D63698EF043051EFB0B7E5280EDACF35A09B29 - Certificate
-  subject:    DN: CN=Signum-RSA-2048
-  ID:         50d63698ef043051efb0b7e5280edacf35a09b29
-  Unique ID:
-Certificate Object; type = X.509 cert
-  label:      170570A1D56FBB5A4CC780B69ACAEF94010D5DAA - Certificate
-  subject:    DN: CN=Signum-RSA-3072
-  ID:         170570a1d56fbb5a4cc780b69acaef94010d5daa
-  Unique ID:
-Certificate Object; type = X.509 cert
-  label:      3AB5BFB91DFBB46CF765D5BEE51429618C4857DD - Certificate
-  subject:    DN: CN=Signum-RSA-4096
-  ID:         3ab5bfb91dfbb46cf765d5bee51429618c4857dd
-  Unique ID:
+Subject CN     : Signum-RSA-3072
+    Issuer CN      : DemoRoot-G2
+    Valid Until    : 2029-04-23
+    Valid From     : 2024-04-24
+    Thumbprint     : 170570A1D56FBB5A4CC780B69ACAEF94010D5DAA
+Subject CN     : Signum-RSA-4096
+    Issuer CN      : DemoRoot-G2
+    Valid Until    : 2029-04-23
+    Valid From     : 2024-04-24
+    Thumbprint     : 3AB5BFB91DFBB46CF765D5BEE51429618C4857DD
+Subject CN     : Signum-RSA-2048
+    Issuer CN      : DemoRoot-G2
+    Valid Until    : 2030-02-05
+    Valid From     : 2025-02-06
+    Thumbprint     : F78AE7871FEF1D0CF3EFFB58E9CC85F261438D2B
 ```
+
 
 ## Modifying the Base Image
 Add the pkcs11 based signing tools your team would like to use
