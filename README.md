@@ -14,6 +14,7 @@ To report a problem or suggest a new feature, use the **[Issues](../../issues)**
 ---
 
 ## Running the Signum Container Agent Base Image
+Note that running the Container Agent as root or as any user other than 10001 will prevent the configuration from being accessed correctly. For more information, see [Container Agent documentation](https://docs.keyfactor.com/Signum-SaaS/latest/container-agent).
 ```sh
 docker run --name signum-agent -e "SIGNUM_HOSTNAME=A URL" -e "SIGNUM_USERNAME=myuser@somedomain" -e "SIGNUM_PASSWORD=$mycreds" -e "SIGNUM_LOGLEVEL=HIGH" -e "SIGNUM_LOGTYPE=FILE" repo.keyfactor.com/images/signum-agent:4.60.2
 ```
