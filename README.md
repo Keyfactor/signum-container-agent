@@ -5,6 +5,7 @@ Usage examples of several popular signing tools can be found in [signing-tool-ex
 - [Cosign](/signing-tool-examples/cosign.md) — OCI/container image signing
 - [Jarsigner](/signing-tool-examples/jarsigner.md) — Java JAR file signing
 - [Jsign](/signing-tool-examples/jsign.md) — Windows Authenticode signing
+- [OpenSC (pkcs11-tool)](/signing-tool-examples/opensc.md) — PKCS#11 token inspection and debugging
 - [OpenSSL](/signing-tool-examples/openssl.md) — General-purpose cryptographic operations
 - [XMLSecTool](/signing-tool-examples/xmlsectool.md) — XML digital signatures
 
@@ -96,9 +97,132 @@ docker run --name signum-agent -d \
   repo.keyfactor.com/images/signum-agent:4.80.1
 ```
 
+## Deploying on Kubernetes
+
+Two things are easy to miss when writing a Kubernetes manifest for the Signum Container Agent:
+
+1. **You must set `securityContext.runAsUser: 10001` on the app container.** The image is built to run as UID `10001`, but Kubernetes does not infer this from the image — if you omit it the pod may start as a different user and the agent will not find its configuration or credentials.
+2. **If you need to add a custom CA to the trust store** (e.g. the Signum server presents a certificate chained to an internal CA), you have to run `update-ca-trust extract` as root. The image runs as non-root, so do it in an init container and share the results with the app container via `emptyDir` volumes mounted at `/etc/pki/ca-trust/source/anchors/` and `/etc/pki/ca-trust/extracted/`. Writing into the image's baked-in trust store from the app container will fail or will not persist.
+
+### Example manifest
+
+The manifest below deploys the agent with both points addressed. It injects a CA certificate from a `ConfigMap` named `my-custom-ca-cert` and reads `SIGNUM_USERNAME` / `SIGNUM_PASSWORD` from a `Secret` named `<DEPLOYMENT_NAME>-signum-creds`. Replace the `<PLACEHOLDERS>` before applying.
+
+<details>
+<summary>Click to expand full manifest</summary>
+
+```json
+{
+  "apiVersion": "apps/v1",
+  "kind": "Deployment",
+  "metadata": {
+    "name": "<DEPLOYMENT_NAME>",
+    "labels": {
+      "app.kubernetes.io/name": "signum-agent",
+      "app.kubernetes.io/instance": "<INSTANCE_NAME>",
+      "app.kubernetes.io/version": "<AGENT_VERSION>",
+      "app.kubernetes.io/part-of": "signum",
+      "deployment-name": "<DEPLOYMENT_NAME>"
+    }
+  },
+  "spec": {
+    "replicas": 1,
+    "selector": {
+      "matchLabels": {
+        "app.kubernetes.io/instance": "<INSTANCE_NAME>",
+        "deployment-name": "<DEPLOYMENT_NAME>"
+      }
+    },
+    "template": {
+      "metadata": {
+        "labels": {
+          "app.kubernetes.io/name": "signum-agent",
+          "app.kubernetes.io/instance": "<INSTANCE_NAME>",
+          "app.kubernetes.io/version": "<AGENT_VERSION>",
+          "app.kubernetes.io/part-of": "signum",
+          "deployment-name": "<DEPLOYMENT_NAME>"
+        }
+      },
+      "spec": {
+        "imagePullSecrets": [
+          { "name": "image-creds" }
+        ],
+        "volumes": [
+          {
+            "name": "ca-cert",
+            "configMap": { "name": "my-custom-ca-cert" }
+          },
+          { "name": "ca-trust-anchors",   "emptyDir": {} },
+          { "name": "ca-trust-extracted", "emptyDir": {} }
+        ],
+        "initContainers": [
+          {
+            "name": "update-ca-trust",
+            "image": "<IMAGE_HOST>/<IMAGE_PATH>:<AGENT_VERSION>",
+            "securityContext": { "runAsUser": 0 },
+            "command": [
+              "/bin/sh",
+              "-c",
+              "cp /ca-cert/*.crt /etc/pki/ca-trust/source/anchors/; mkdir /etc/pki/ca-trust/extracted/{edk2,java,openssl,pem}; update-ca-trust extract;"
+            ],
+            "volumeMounts": [
+              { "name": "ca-cert",            "mountPath": "/ca-cert", "readOnly": true },
+              { "name": "ca-trust-anchors",   "mountPath": "/etc/pki/ca-trust/source/anchors/" },
+              { "name": "ca-trust-extracted", "mountPath": "/etc/pki/ca-trust/extracted/" }
+            ],
+            "resources": {
+              "limits": { "cpu": "50m", "memory": "128Mi" }
+            }
+          }
+        ],
+        "containers": [
+          {
+            "name": "signum-agent",
+            "image": "<IMAGE_HOST>/<IMAGE_PATH>:<AGENT_VERSION>",
+            "imagePullPolicy": "IfNotPresent",
+            "securityContext": { "runAsUser": 10001 },
+            "env": [
+              { "name": "SIGNUM_HOSTNAME", "value": "<SIGNUM_HOSTNAME>" },
+              {
+                "name": "SIGNUM_USERNAME",
+                "valueFrom": {
+                  "secretKeyRef": { "name": "<DEPLOYMENT_NAME>-signum-creds", "key": "username" }
+                }
+              },
+              {
+                "name": "SIGNUM_PASSWORD",
+                "valueFrom": {
+                  "secretKeyRef": { "name": "<DEPLOYMENT_NAME>-signum-creds", "key": "password" }
+                }
+              },
+              { "name": "SIGNUM_LOGLEVEL", "value": "HIGH" },
+              { "name": "SIGNUM_LOGTYPE",  "value": "FILE" }
+            ],
+            "volumeMounts": [
+              { "name": "ca-trust-anchors",   "mountPath": "/etc/pki/ca-trust/source/anchors/" },
+              { "name": "ca-trust-extracted", "mountPath": "/etc/pki/ca-trust/extracted/" }
+            ],
+            "resources": {
+              "requests": { "cpu": "100m", "memory": "128Mi" },
+              "limits":   { "cpu": "250m", "memory": "256Mi" }
+            }
+          }
+        ]
+      }
+    }
+  }
+}
+```
+
+</details>
+
+If you don't need a custom CA, drop the `ca-cert` / `ca-trust-anchors` / `ca-trust-extracted` volumes, their mounts, and the `update-ca-trust` init container — `securityContext.runAsUser: 10001` on the app container is still required.
+
 ## Modifying the Base Image
 Add the PKCS#11-based signing tools your team would like to use.
 See [dockerfile-examples](/dockerfile-examples/) for some examples. In production you should verify the sources of external repositories.
+
+> **Note (4.80.1):** `pkcs11-tool` (from OpenSC) is no longer preinstalled in the base image. If you need it to inspect or debug the PKCS#11 token from inside the container, layer the [dockerfile-opensc](/dockerfile-examples/dockerfile-opensc) example on top of the base image. See [signing-tool-examples/opensc.md](/signing-tool-examples/opensc.md) for usage.
 
 ### PKCS#11 Configuration File
 
@@ -163,6 +287,37 @@ Sign a file using Jsign:
 java -jar jsign-6.0.jar --keystore /etc/keyfactor/signumpkcs11.cfg --storetype PKCS11 --alias "3AB5BFB91DFBB46CF765D5BEE51429618C4857DD - Certificate" /mnt/filestosign/example-script.ps1
 ```
 
+### Example: Adding OpenSC (pkcs11-tool) to the Base Image
+
+As of 4.80.1 the base image no longer bundles `pkcs11-tool`. Build the `dockerfile-opensc` example to layer it on:
+
+```bash
+docker buildx build -f dockerfile-examples/dockerfile-opensc -t signum-container-agent:opensc .
+```
+
+Run the container and exec into it:
+
+```bash
+docker run --name signum-agent -d \
+  -e "SIGNUM_HOSTNAME=A URL" \
+  -e "SIGNUM_USERNAME=myuser@somedomain" \
+  -e "SIGNUM_PASSWORD=$mycreds" \
+  -e "SIGNUM_LOGLEVEL=HIGH" \
+  -e "SIGNUM_LOGTYPE=FILE" \
+  signum-container-agent:opensc
+
+docker exec -it signum-agent /bin/bash
+```
+
+List slots and objects on the Signum token:
+
+```sh
+pkcs11-tool --module /usr/lib/libsignumpkcs11.so --list-slots
+pkcs11-tool --module /usr/lib/libsignumpkcs11.so --list-objects
+```
+
+See [signing-tool-examples/opensc.md](/signing-tool-examples/opensc.md) for the full usage example.
+
 ---
 
 ## Troubleshooting
@@ -171,6 +326,10 @@ java -jar jsign-6.0.jar --keystore /etc/keyfactor/signumpkcs11.cfg --storetype P
 - Verify `SIGNUM_HOSTNAME` is reachable from within the container: `curl -v $SIGNUM_HOSTNAME`
 - Check that `SIGNUM_USERNAME` and `SIGNUM_PASSWORD` are correct
 - Set `SIGNUM_LOGLEVEL=HIGH` to get detailed logs
+- If the Signum server uses a certificate chained to an internal/private CA, verify the container trusts the issuing CA. From inside the container:
+  - `curl -w '%{ssl_verify_result}\n' -s -o /dev/null $SIGNUM_HOSTNAME` — `0` means verification succeeded, any non-zero value indicates a TLS trust failure
+  - `curl -vI $SIGNUM_HOSTNAME` — prints the server certificate chain and verification details
+  - On Kubernetes, the CA must be added to the trust store via an init container that runs `update-ca-trust extract` as root. See the [Deploying on Kubernetes](#deploying-on-kubernetes) example.
 
 ### `signum-util lc` returns no certificates
 - Confirm the agent has successfully authenticated (check logs with `SIGNUM_LOGLEVEL=HIGH`)
@@ -180,6 +339,9 @@ java -jar jsign-6.0.jar --keystore /etc/keyfactor/signumpkcs11.cfg --storetype P
 - Confirm `/usr/lib/libsignumpkcs11.so` exists inside the container: `ls -la /usr/lib/libsignumpkcs11.so`
 - Confirm `/etc/keyfactor/signumpkcs11.cfg` exists and contains the correct library path
 - Confirm `/usr/share/p11-kit/modules/signum.module` exists and contains the correct library path
+
+### `pkcs11-tool: command not found`
+- As of 4.80.1 OpenSC is no longer bundled in the base image. Build the [dockerfile-opensc](/dockerfile-examples/dockerfile-opensc) example and use that image, or install `opensc` in your own derived Dockerfile.
 
 ### `keytool` returns no entries
 - The agent must be running and authenticated before the PKCS#11 keystore is populated
