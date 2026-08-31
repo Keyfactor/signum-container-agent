@@ -27,7 +27,7 @@ docker run --name signum-agent \
   -e "SIGNUM_PASSWORD=$mycreds" \
   -e "SIGNUM_LOGLEVEL=HIGH" \
   -e "SIGNUM_LOGTYPE=FILE" \
-  repo.keyfactor.com/images/signum-agent:4.80.1
+  repo.keyfactor.com/images/signum-agent:4.80.2
 ```
 ```sh
 docker exec -it signum-agent /bin/bash
@@ -59,8 +59,9 @@ Subject CN     : Signum-RSA-2048
 
 | Variable | Required | Description |
 |---|---|---|
-| `SIGNUM_HOSTNAME` | Yes | URL of the Signum server (e.g. `https://signum.example.com`) |
-| `SIGNUM_USERNAME` | Yes* | Username for authenticating to the Signum server. |
+| `SIGNUM_HOSTNAME` | Yes | URL of the Signum or SignServer host (e.g. `https://signum.example.com`) |
+| `SIGNUM_BACKEND` | No | Backend type: `SIGNUM` (default) or `SIGNSERVER`. Requires image `4.80.2` or later. |
+| `SIGNUM_USERNAME` | Yes* | Username for authenticating to the Signum server (Signum backend only). |
 | `SIGNUM_PASSWORD` | Yes* | Password for authenticating to the Signum server, if using certificate authentication it's the password of the .p12 file. |
 | `SIGNUM_LOGLEVEL` | No | Controls log verbosity. Valid values: `LOW`, `MEDIUM`, `HIGH`. `HIGH` produces the most output and should be only used for troubleshooting. |
 | `SIGNUM_LOGTYPE` | No | Controls log destination. Valid values: `FILE` (writes to a log file inside the container), `STDOUT` (writes to stdout). |
@@ -70,7 +71,7 @@ Subject CN     : Signum-RSA-2048
 | `SIGNUM_WAF_PORT` | No* | Provide the WAF port configured in the Administration Console. Required only when using certificate-based login behind a WAF. |
 
 ---
-*If using certificate authentication, you need to provide 'SIGNUM_CERTIFICATE_PATH', 'SIGNUM_WAF_PORT', and 'SIGNUM_PASSWORD'. For user-password login, provide 'SIGNUM_USERNAME' and 'SIGNUM_PASSWORD'.
+*If using certificate authentication, you need to provide 'SIGNUM_CERTIFICATE_PATH', 'SIGNUM_WAF_PORT', and 'SIGNUM_PASSWORD'. For user-password login, provide 'SIGNUM_USERNAME' and 'SIGNUM_PASSWORD'. The `SIGNSERVER` backend is certificate-based and requires 'SIGNUM_CERTIFICATE_PATH' and 'SIGNUM_PASSWORD' (username/password login is not supported).
 
 ### User-Password Authentication
 ```bash
@@ -80,7 +81,7 @@ docker run --name signum-agent -d \
   -e "SIGNUM_PASSWORD=$mycreds" \
   -e "SIGNUM_LOGLEVEL=HIGH" \
   -e "SIGNUM_LOGTYPE=FILE" \
-  repo.keyfactor.com/images/signum-agent:4.80.1
+  repo.keyfactor.com/images/signum-agent:4.80.2
 ```
 
 ### Certificate Authentication
@@ -94,7 +95,25 @@ docker run --name signum-agent -d \
   -e "SIGNUM_LOGLEVEL=HIGH" \
   -e "SIGNUM_LOGTYPE=FILE" \
   -e "SIGNUM_WAF_PORT=$myWafPort" \
-  repo.keyfactor.com/images/signum-agent:4.80.1
+  repo.keyfactor.com/images/signum-agent:4.80.2
+```
+
+### SignServer Authentication
+
+> Requires image `4.80.2` or later.
+
+To connect to a SignServer backend instead of Signum, set `SIGNUM_BACKEND=SIGNSERVER`. This backend authenticates with a client certificate (`.p12`); username/password login is not supported. Mount the certificate into the container and point `SIGNUM_CERTIFICATE_PATH` at it.
+
+```bash
+docker run --name signum-agent -d \
+  -v $PWD/loginCertificate.p12:/mnt/loginCertificate.p12 \
+  -e "SIGNUM_HOSTNAME=A URL" \
+  -e "SIGNUM_BACKEND=SIGNSERVER" \
+  -e "SIGNUM_CERTIFICATE_PATH=/mnt/loginCertificate.p12" \
+  -e "SIGNUM_PASSWORD=$myCertificatePassword" \
+  -e "SIGNUM_LOGLEVEL=HIGH" \
+  -e "SIGNUM_LOGTYPE=FILE" \
+  repo.keyfactor.com/images/signum-agent:4.80.2
 ```
 
 ## Deploying on Kubernetes
