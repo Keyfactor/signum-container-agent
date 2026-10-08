@@ -27,7 +27,7 @@ docker run --name signum-agent \
   -e "SIGNUM_PASSWORD=$mycreds" \
   -e "SIGNUM_LOGLEVEL=HIGH" \
   -e "SIGNUM_LOGTYPE=FILE" \
-  repo.keyfactor.com/images/signum-agent:4.80.2
+  repo.keyfactor.com/images/signum-agent:4.90.1
 ```
 ```sh
 docker exec -it signum-agent /bin/bash
@@ -60,14 +60,14 @@ Subject CN     : Signum-RSA-2048
 | Variable | Required | Description |
 |---|---|---|
 | `SIGNUM_HOSTNAME` | Yes | URL of the Signum or SignServer host (e.g. `https://signum.example.com`) |
-| `SIGNUM_BACKEND` | No | Backend type: `SIGNUM` (default) or `SIGNSERVER`. Requires image `4.80.2` or later. |
+| `SIGNUM_BACKEND` | No | Backend type: `SIGNUM` (default) or `SIGNSERVER`. Requires image `4.90.1` or later. |
 | `SIGNUM_USERNAME` | Yes* | Username for authenticating to the Signum server (Signum backend only). |
 | `SIGNUM_PASSWORD` | Yes* | Password for authenticating to the Signum server, if using certificate authentication it's the password of the .p12 file. |
 | `SIGNUM_LOGLEVEL` | No | Controls log verbosity. Valid values: `LOW`, `MEDIUM`, `HIGH`. `HIGH` produces the most output and should be only used for troubleshooting. |
 | `SIGNUM_LOGTYPE` | No | Controls log destination. Valid values: `FILE` (writes to a log file inside the container), `STDOUT` (writes to stdout). |
 | `SIGNUM_AGENTID` | No | Allows to pre-define the agentID that will be reported to the server. The default value is `AAAAA-BBBBB-CCCCC-DDDDD`. The provided AgentID must have the same format. |
-| `SIGNUM_HTTPS_PROXY` | No | The proxy to be used for connecting to the Signum instance. Check the [official documentation](https://docs.keyfactor.com/Signum-SaaS/latest/linux-agent#id-(4.90.1)LinuxAgent-Setup/) for more information |
-| `SIGNUM_CERTIFICATE_PATH` | No* | The absolute certificate path inside the container used to connect to the Signum instance. Must be a .p12 file. Check the [official documentation](https://docs.keyfactor.com/Signum-SaaS/latest/linux-agent#id-(4.90.1)LinuxAgent-AuthenticatewithCertificate/) for more information |
+| `SIGNUM_HTTPS_PROXY` | No | The proxy to be used for connecting to the Signum instance. Check the [official documentation](https://docs.keyfactor.com/signum/latest/configure-authenticate-agent/) for more information |
+| `SIGNUM_CERTIFICATE_PATH` | No* | The absolute certificate path inside the container used to connect to the Signum instance. Must be a .p12 file. Check the [official documentation](https://docs.keyfactor.com/signum/latest/configure-authenticate-agent) for more information |
 | `SIGNUM_WAF_PORT` | No* | Provide the WAF port configured in the Administration Console. Required only when using certificate-based login behind a WAF. |
 | `SIGNUM_TLS_TRUSTED_CA` | No | The absolute path inside the container to a PEM file containing the trusted CA certificate for the server's TLS certificate. When set, the TLS validation mode automatically switches to `PinnedCA`. See [Trusted CA (Pinned CA)](#trusted-ca-pinned-ca). |
 
@@ -82,7 +82,7 @@ docker run --name signum-agent -d \
   -e "SIGNUM_PASSWORD=$mycreds" \
   -e "SIGNUM_LOGLEVEL=HIGH" \
   -e "SIGNUM_LOGTYPE=FILE" \
-  repo.keyfactor.com/images/signum-agent:4.80.2
+  repo.keyfactor.com/images/signum-agent:4.90.1
 ```
 
 ### Certificate Authentication
@@ -96,12 +96,12 @@ docker run --name signum-agent -d \
   -e "SIGNUM_LOGLEVEL=HIGH" \
   -e "SIGNUM_LOGTYPE=FILE" \
   -e "SIGNUM_WAF_PORT=$myWafPort" \
-  repo.keyfactor.com/images/signum-agent:4.80.2
+  repo.keyfactor.com/images/signum-agent:4.90.1
 ```
 
 ### SignServer Authentication
 
-> Requires image `4.80.2` or later.
+> Requires image `4.90.1` or later.
 
 To connect to a SignServer backend instead of Signum, set `SIGNUM_BACKEND=SIGNSERVER`. This backend authenticates with a client certificate (`.p12`); username/password login is not supported. Mount the certificate into the container and point `SIGNUM_CERTIFICATE_PATH` at it.
 
@@ -114,7 +114,7 @@ docker run --name signum-agent -d \
   -e "SIGNUM_PASSWORD=$myCertificatePassword" \
   -e "SIGNUM_LOGLEVEL=HIGH" \
   -e "SIGNUM_LOGTYPE=FILE" \
-  repo.keyfactor.com/images/signum-agent:4.80.2
+  repo.keyfactor.com/images/signum-agent:4.90.1
 ```
 
 ### Trusted CA (Pinned CA)
@@ -130,10 +130,10 @@ docker run --name signum-agent -d \
   -e "SIGNUM_TLS_TRUSTED_CA=/tmp/trustedCa.pem" \
   -e "SIGNUM_LOGLEVEL=HIGH" \
   -e "SIGNUM_LOGTYPE=FILE" \
-  repo.keyfactor.com/images/signum-agent:4.80.2
+  repo.keyfactor.com/images/signum-agent:4.90.1
 ```
 
-For more information about the validation modes, check the [official documentation](https://docs.keyfactor.com/Signum-SaaS/latest/linux-agent#id-(4.90.1)).
+For more information about the validation modes, check the [official documentation](https://docs.keyfactor.com/signum/latest/configure-authenticate-agent).
 
 ## Deploying on Kubernetes
 
