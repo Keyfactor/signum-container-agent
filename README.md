@@ -66,9 +66,10 @@ Subject CN     : Signum-RSA-2048
 | `SIGNUM_LOGLEVEL` | No | Controls log verbosity. Valid values: `LOW`, `MEDIUM`, `HIGH`. `HIGH` produces the most output and should be only used for troubleshooting. |
 | `SIGNUM_LOGTYPE` | No | Controls log destination. Valid values: `FILE` (writes to a log file inside the container), `STDOUT` (writes to stdout). |
 | `SIGNUM_AGENTID` | No | Allows to pre-define the agentID that will be reported to the server. The default value is `AAAAA-BBBBB-CCCCC-DDDDD`. The provided AgentID must have the same format. |
-| `SIGNUM_HTTPS_PROXY` | No | The proxy to be used for connecting to the Signum instance. Check the [official documentation](https://docs.keyfactor.com/Signum-SaaS/latest/linux-agent#id-(4.70.1)LinuxAgent-Setup/) for more information |
-| `SIGNUM_CERTIFICATE_PATH` | No* | The absolute certificate path inside the container used to connect to the Signum instance. Must be a .p12 file. Check the [official documentation](https://docs.keyfactor.com/Signum-SaaS/latest/linux-agent#id-(4.70.1)LinuxAgent-AuthenticatewithCertificate/) for more information |
+| `SIGNUM_HTTPS_PROXY` | No | The proxy to be used for connecting to the Signum instance. Check the [official documentation](https://docs.keyfactor.com/Signum-SaaS/latest/linux-agent#id-(4.90.1)LinuxAgent-Setup/) for more information |
+| `SIGNUM_CERTIFICATE_PATH` | No* | The absolute certificate path inside the container used to connect to the Signum instance. Must be a .p12 file. Check the [official documentation](https://docs.keyfactor.com/Signum-SaaS/latest/linux-agent#id-(4.90.1)LinuxAgent-AuthenticatewithCertificate/) for more information |
 | `SIGNUM_WAF_PORT` | No* | Provide the WAF port configured in the Administration Console. Required only when using certificate-based login behind a WAF. |
+| `SIGNUM_TLS_TRUSTED_CA` | No | The absolute path inside the container to a PEM file containing the trusted CA certificate for the server's TLS certificate. When set, the TLS validation mode automatically switches to `PinnedCA`. See [Trusted CA (Pinned CA)](#trusted-ca-pinned-ca). |
 
 ---
 *If using certificate authentication, you need to provide 'SIGNUM_CERTIFICATE_PATH', 'SIGNUM_WAF_PORT', and 'SIGNUM_PASSWORD'. For user-password login, provide 'SIGNUM_USERNAME' and 'SIGNUM_PASSWORD'. The `SIGNSERVER` backend is certificate-based and requires 'SIGNUM_CERTIFICATE_PATH' and 'SIGNUM_PASSWORD' (username/password login is not supported).
@@ -115,6 +116,24 @@ docker run --name signum-agent -d \
   -e "SIGNUM_LOGTYPE=FILE" \
   repo.keyfactor.com/images/signum-agent:4.80.2
 ```
+
+### Trusted CA (Pinned CA)
+
+To make the agent validate the server's TLS certificate against a specific CA, mount the CA certificate (PEM) into the container and point `SIGNUM_TLS_TRUSTED_CA` at it. Providing a trusted CA automatically changes the TLS validation mode to `PinnedCA`; no additional setting is required.
+
+```bash
+docker run --name signum-agent -d \
+  -v $PWD/trustedCa.pem:/tmp/trustedCa.pem \
+  -e "SIGNUM_HOSTNAME=A URL" \
+  -e "SIGNUM_USERNAME=myuser@somedomain" \
+  -e "SIGNUM_PASSWORD=$mycreds" \
+  -e "SIGNUM_TLS_TRUSTED_CA=/tmp/trustedCa.pem" \
+  -e "SIGNUM_LOGLEVEL=HIGH" \
+  -e "SIGNUM_LOGTYPE=FILE" \
+  repo.keyfactor.com/images/signum-agent:4.80.2
+```
+
+For more information about the validation modes, check the [official documentation](https://docs.keyfactor.com/Signum-SaaS/latest/linux-agent#id-(4.90.1)).
 
 ## Deploying on Kubernetes
 
