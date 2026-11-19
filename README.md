@@ -140,11 +140,15 @@ For more information about the validation modes, check the [official documentati
 Two things are easy to miss when writing a Kubernetes manifest for the Signum Container Agent:
 
 1. **You must set `securityContext.runAsUser: 10001` on the app container.** The image is built to run as UID `10001`, but Kubernetes does not infer this from the image — if you omit it the pod may start as a different user and the agent will not find its configuration or credentials.
-2. **If you need to add a custom CA to the trust store** (e.g. the Signum server presents a certificate chained to an internal CA), you have to run `update-ca-trust extract` as root. The image runs as non-root, so do it in an init container and share the results with the app container via `emptyDir` volumes mounted at `/etc/pki/ca-trust/source/anchors/` and `/etc/pki/ca-trust/extracted/`. Writing into the image's baked-in trust store from the app container will fail or will not persist.
+2. **If you need to add a custom CA** (e.g. the Signum server presents a certificate chained to an internal CA), there are two complementary options:
+   - **Agent only:** mount the CA certificate (PEM) and set `SIGNUM_TLS_TRUSTED_CA` to its absolute path. Only the Signum agent's validation of the backend is affected. See [Trusted CA (Pinned CA)](#trusted-ca-pinned-ca).
+   - **System-wide:** add the CA to the container's trust store (`/etc/ssl/certs/ca-certificates.crt`), so every application in the container (curl, OpenSSL, .NET, other tools you install) trusts your private PKI. The image runs as non-root and the trust store is baked into the image, so do it in an init container running as root: copy the image's `/etc/ssl/certs` into an `emptyDir`, append your CA to the bundle, and mount that `emptyDir` over `/etc/ssl/certs` in the app container. Tools with their own trust store (for example Java's `cacerts`) are not covered and need their own configuration.
+
+   The two can be combined. Writing into the image's baked-in trust store from the app container will fail or will not persist.
 
 ### Example manifest
 
-The manifest below deploys the agent with both points addressed. It injects a CA certificate from a `ConfigMap` named `my-custom-ca-cert` and reads `SIGNUM_USERNAME` / `SIGNUM_PASSWORD` from a `Secret` named `<DEPLOYMENT_NAME>-signum-creds`. Replace the `<PLACEHOLDERS>` before applying.
+The manifest below deploys the agent with both points addressed. It injects a CA certificate from a `ConfigMap` named `my-custom-ca-cert` (key `ca.crt`), adds it to the system-wide trust store and also pins the agent to it and reads `SIGNUM_USERNAME` / `SIGNUM_PASSWORD` from a `Secret` named `<DEPLOYMENT_NAME>-signum-creds`. Replace the `<PLACEHOLDERS>` before applying.
 
 <details>
 <summary>Click to expand full manifest</summary>
@@ -190,8 +194,7 @@ The manifest below deploys the agent with both points addressed. It injects a CA
             "name": "ca-cert",
             "configMap": { "name": "my-custom-ca-cert" }
           },
-          { "name": "ca-trust-anchors",   "emptyDir": {} },
-          { "name": "ca-trust-extracted", "emptyDir": {} }
+          { "name": "ca-trust-certs", "emptyDir": {} }
         ],
         "initContainers": [
           {
@@ -201,12 +204,11 @@ The manifest below deploys the agent with both points addressed. It injects a CA
             "command": [
               "/bin/sh",
               "-c",
-              "cp /ca-cert/*.crt /etc/pki/ca-trust/source/anchors/; mkdir /etc/pki/ca-trust/extracted/{edk2,java,openssl,pem}; update-ca-trust extract;"
+              "cp -a /etc/ssl/certs/. /ca-trust-certs/ && for f in /ca-trust-certs/ca-certificates.crt /ca-trust-certs/ca-bundle.crt; do if [ -f \"$f\" ] && [ ! -L \"$f\" ]; then cat /ca-cert/*.crt >> \"$f\"; fi; done"
             ],
             "volumeMounts": [
-              { "name": "ca-cert",            "mountPath": "/ca-cert", "readOnly": true },
-              { "name": "ca-trust-anchors",   "mountPath": "/etc/pki/ca-trust/source/anchors/" },
-              { "name": "ca-trust-extracted", "mountPath": "/etc/pki/ca-trust/extracted/" }
+              { "name": "ca-cert",        "mountPath": "/ca-cert", "readOnly": true },
+              { "name": "ca-trust-certs", "mountPath": "/ca-trust-certs" }
             ],
             "resources": {
               "limits": { "cpu": "50m", "memory": "128Mi" }
@@ -233,12 +235,13 @@ The manifest below deploys the agent with both points addressed. It injects a CA
                   "secretKeyRef": { "name": "<DEPLOYMENT_NAME>-signum-creds", "key": "password" }
                 }
               },
+              { "name": "SIGNUM_TLS_TRUSTED_CA", "value": "/ca-cert/ca.crt" },
               { "name": "SIGNUM_LOGLEVEL", "value": "HIGH" },
               { "name": "SIGNUM_LOGTYPE",  "value": "FILE" }
             ],
             "volumeMounts": [
-              { "name": "ca-trust-anchors",   "mountPath": "/etc/pki/ca-trust/source/anchors/" },
-              { "name": "ca-trust-extracted", "mountPath": "/etc/pki/ca-trust/extracted/" }
+              { "name": "ca-cert",        "mountPath": "/ca-cert", "readOnly": true },
+              { "name": "ca-trust-certs", "mountPath": "/etc/ssl/certs", "readOnly": true }
             ],
             "resources": {
               "requests": { "cpu": "100m", "memory": "128Mi" },
@@ -254,7 +257,7 @@ The manifest below deploys the agent with both points addressed. It injects a CA
 
 </details>
 
-If you don't need a custom CA, drop the `ca-cert` / `ca-trust-anchors` / `ca-trust-extracted` volumes, their mounts, and the `update-ca-trust` init container — `securityContext.runAsUser: 10001` on the app container is still required.
+If you don't need a custom CA, drop the `ca-cert` / `ca-trust-certs` volumes, their mounts, the `update-ca-trust` init container and the `SIGNUM_TLS_TRUSTED_CA` variable. To pin only the agent and leave the system trust store alone, drop just the `ca-trust-certs` volume, its mounts and the init container — `securityContext.runAsUser: 10001` on the app container is still required.
 
 ## Modifying the Base Image
 Add the PKCS#11-based signing tools your team would like to use.
@@ -367,7 +370,7 @@ See [signing-tool-examples/opensc.md](/signing-tool-examples/opensc.md) for the 
 - If the Signum server uses a certificate chained to an internal/private CA, verify the container trusts the issuing CA. From inside the container:
   - `curl -w '%{ssl_verify_result}\n' -s -o /dev/null $SIGNUM_HOSTNAME` — `0` means verification succeeded, any non-zero value indicates a TLS trust failure
   - `curl -vI $SIGNUM_HOSTNAME` — prints the server certificate chain and verification details
-  - On Kubernetes, the CA must be added to the trust store via an init container that runs `update-ca-trust extract` as root. See the [Deploying on Kubernetes](#deploying-on-kubernetes) example.
+  - Either pin the agent with `SIGNUM_TLS_TRUSTED_CA` (see [Trusted CA (Pinned CA)](#trusted-ca-pinned-ca)), or add the CA to the system trust store (`/etc/ssl/certs/ca-certificates.crt`) as root. On Kubernetes, the system-wide option uses an init container, see the [Deploying on Kubernetes](#deploying-on-kubernetes) example.
 
 ### `signum-util lc` returns no certificates
 - Confirm the agent has successfully authenticated (check logs with `SIGNUM_LOGLEVEL=HIGH`)

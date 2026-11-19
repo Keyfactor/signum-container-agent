@@ -3,7 +3,7 @@
 As an proof of concept you can run a local registry to try things out or use an existing OCI compliant registry. Here is an example using [Docker Registry](https://hub.docker.com/_/registry).
 
 You will need to use Cosign built with pkcs11 (cosign-linux-pivkey-pkcs11key)
-support https://github.com/sigstore/cosign/releases. The certificate being used also needs to include an email address as a SAN value which EJBCA can issue from an [end entity profile](https://docs.keyfactor.com/ejbca/latest/end-entity-profiles-fields#id-(9.5)EndEntityProfilesFields-RFC822Name(e-mailaddress)).
+support https://github.com/sigstore/cosign/releases. The build is published for both `amd64` and `arm64` (`cosign-linux-pivkey-pkcs11key-amd64` / `-arm64`); the example Dockerfiles pick the right one from the build platform. The certificate being used also needs to include an email address as a SAN value which EJBCA can issue from an [end entity profile](https://docs.keyfactor.com/ejbca/latest/end-entity-profiles-fields#id-(9.5)EndEntityProfilesFields-RFC822Name(e-mailaddress)).
 
 Start a local Docker Registry
 ```sh
@@ -38,7 +38,7 @@ If running a local registry on the default Docker network we will need the ip to
 docker ps -q | xargs docker inspect --format '{{ .Name }} - {{ .NetworkSettings.IPAddress }}'
 ```
 
-Exec into the container and use Cosign to list the Key Objects.
+Exec into the container and use Cosign to list the Key Objects. Cosign numbers PKCS#11 slots from 1, so the first Signum slot is `--slot-id 1` even though `pkcs11-tool` shows it as slot 0.
 ```sh
  cosign pkcs11-tool list-keys-uris --module-path /usr/lib/libsignumpkcs11.so --slot-id 1
 ```
