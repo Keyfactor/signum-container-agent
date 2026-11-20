@@ -2,11 +2,11 @@
 Jsign is a Java implementation of Microsoft's Authenticode check out the project at https://github.com/ebourg/jsign .
 
 ```sh
-keytool -list -storetype PKCS11 -providerClass sun.security.pkcs11.SunPKCS11 -providerArg keyfactorpkcs11.cfg -storepass NONE
+keytool -list -storetype PKCS11 -providerClass sun.security.pkcs11.SunPKCS11 -providerArg signumpkcs11.cfg -storepass NONE
 ```
 ```sh
 Keystore type: PKCS11
-Keystore provider: SunPKCS11-KeyfactorPKCS11
+Keystore provider: SunPKCS11-SignumPKCS11
 
 Your keystore contains 1 entry
 
@@ -15,7 +15,7 @@ Certificate fingerprint (SHA-256): 97:58:8B:1B:C4:D5:19:3C:C6:5F:3F:4A:73:11:53:
 ```
 
 ```sh
-java -jar jsign-6.0.jar --keystore /etc/keyfactor/keyfactorpkcs11.cfg --storetype PKCS11 --alias "3AB5BFB91DFBB46CF765D5BEE51429618C4857DD - Certificate" /mnt/filestosign/example-script.ps1
+java -jar jsign-6.0.jar --keystore /etc/keyfactor/signumpkcs11.cfg --storetype PKCS11 --alias "3AB5BFB91DFBB46CF765D5BEE51429618C4857DD - Certificate" /mnt/filestosign/example-script.ps1
 ```
 ```sh
 Adding Authenticode signature to /mnt/filestosign/example-script.ps1

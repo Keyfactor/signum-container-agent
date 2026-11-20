@@ -1,33 +1,25 @@
 # Signing with OpenSSL
 
-Listing the Key Objects.
-```sh
-pkcs11-tool --module /usr/lib/libkeyfactorpkcs11.so --list-objects --type cert
-```
+Fully up-to date documentation can be found in the [oficial documentation](https://docs.keyfactor.com/Signum-SaaS/latest/using-signum-with-openssl/)
 
-```sh
-Using slot 0 with a present token (0x0)
-Certificate Object; type = X.509 cert
-  label:      50D63698EF043051EFB0B7E5280EDACF35A09B29 - Certificate
-  subject:    DN: CN=Signum-RSA-2048
-  ID:         50d63698ef043051efb0b7e5280edacf35a09b29
-  Unique ID:
- ```
-## Using Dgst 
+Obtain the pkcs11 private and public URLs for your certificate by following [obtain-pkcs11-url.md](obtain-pkcs11-url.md), then set the `privateUrl` and `publicUrl` variables before continuing.
+
+
+## Using Dgst
 
 ```sh
 echo "some stuff to sign" > test.txt
 ```
 
  ```sh
- openssl dgst -engine pkcs11 -keyform engine -sha256 -sign 50D63698EF043051EFB0B7E5280EDACF35A09B29 test.txt > sign.bin
+ openssl dgst -engine pkcs11 -keyform engine -sha256 -sign $privateURL test.txt > sign.bin
   ```
 ```sh
 Engine "pkcs11" set.
 ```
 
 ```sh
- openssl dgst -engine pkcs11 -keyform engine -sha256 -verify 50D63698EF043051EFB0B7E5280EDACF35A09B29 -signature sign.bin < test.txt
+ openssl dgst -engine pkcs11 -keyform engine -sha256 -verify $publicURL -signature sign.bin < test.txt
  ```
 
  ```sh

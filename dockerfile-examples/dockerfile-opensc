@@ -1,0 +1,16 @@
+FROM repo.keyfactor.com/images/signum-agent:latest
+USER root
+WORKDIR /etc/keyfactor
+
+# OpenSC install
+# Provides the pkcs11-tool binary for inspecting and debugging the Signum PKCS#11 token.
+# As of signum-agent 4.80.1 OpenSC is no longer bundled in the base image; layer this on top
+# whenever you need pkcs11-tool inside the container.
+RUN microdnf update -y && \
+    microdnf install opensc -y && \
+    microdnf clean all && \
+    rm -rf /var/cache/yum /var/cache/dnf
+
+# /usr/bin/pkcs11-tool is already on PATH after the install, no PATH edit needed.
+
+USER 10001
