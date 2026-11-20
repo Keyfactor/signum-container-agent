@@ -4,6 +4,8 @@ Fully up-to date documentation can be found in the [oficial documentation](https
 
 The images are built with OpenSSL 4, which no longer supports engines. The [dockerfile-openssl](../dockerfile-examples/dockerfile-openssl) example installs the [pkcs11-provider](https://github.com/latchset/pkcs11-provider) and sets `OPENSSL_CONF`, so the Signum PKCS#11 library is loaded automatically and the `-engine pkcs11 -keyform engine` flags are no longer needed.
 
+> **Note:** signing with ECDSA keys through OpenSSL is not supported on Signum Agent Container versions before 5.0.0.
+
 Obtain the pkcs11 private and public URLs for your certificate by following [obtain-pkcs11-url.md](obtain-pkcs11-url.md), then set the `privateUrl` and `publicUrl` variables before continuing.
 
 
