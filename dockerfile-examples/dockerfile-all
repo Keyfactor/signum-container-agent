@@ -1,35 +1,121 @@
+# --------------------------------------------------------------------------
+# Stage 1a: build OpenSC from source (no opensc package for the Signum base image; build tools are installed with apk in a throwaway stage)
+# --------------------------------------------------------------------------
+FROM repo.keyfactor.com/images/signum-agent:latest AS opensc-builder
+
+# Pinned to an upstream master commit: OpenSC 0.27.1 (latest release) does not build against
+# OpenSSL 4, which the Signum base image ships. Switch to a release tarball once 0.28 or later is out.
+ARG OPENSC_COMMIT="ccfa7600f7c7ae249118d5f301e679e476a004a5"
+ARG OPENSC_DOWNLOAD_CHECKSUM="sha256:4886aa2a8b82a40a049e419e5584a4fadf65c66b7afeeb1bf29dbab70d6adc14"
+
+USER root
+WORKDIR /build/
+
+RUN apk update \
+    && apk add build-base curl autoconf automake libtool pkgconf pkgconf-dev openssl-dev pcsc-lite-dev zlib-dev
+
+# Download the source archive and verify it against the pinned checksum
+RUN curl -fsSL -o /build/opensc.tar.gz \
+        "https://github.com/OpenSC/OpenSC/archive/${OPENSC_COMMIT}.tar.gz" \
+    && echo "${OPENSC_DOWNLOAD_CHECKSUM#sha256:}  /build/opensc.tar.gz" | sha256sum -c -
+
+# Source archives (unlike release tarballs) need bootstrap to generate configure
+RUN tar xf opensc.tar.gz \
+    && cd "OpenSC-${OPENSC_COMMIT}" \
+    && ./bootstrap \
+    && ./configure -q --prefix=/usr --sysconfdir=/etc \
+        --disable-doc --disable-man --disable-notify --disable-readline --disable-tests \
+    && make -j"$(nproc)" \
+    && make install DESTDIR=/stage
+
+# Keep only what the final image needs (cp -a keeps the soname symlinks)
+RUN mkdir -p /out/opt/opensc/bin /out/usr/lib/pkcs11 \
+    && cp -a /stage/usr/bin/pkcs11-tool /out/opt/opensc/bin/ \
+    && cp -a /stage/usr/lib/pkcs11/opensc-pkcs11.so /out/usr/lib/pkcs11/ \
+    && cp -a /stage/usr/lib/opensc-pkcs11.so /stage/usr/lib/libopensc.so* /stage/usr/lib/libsmm-local.so* /out/usr/lib/
+
+# --------------------------------------------------------------------------
+# Stage 1b: build the OpenSSL PKCS#11 provider (no pkcs11-provider package for the Signum base image).
+# OpenSSL 4 removed ENGINE support, so the old `-engine pkcs11` (libp11) is not an option.
+# --------------------------------------------------------------------------
+FROM repo.keyfactor.com/images/signum-agent:latest AS provider-builder
+
+ARG PKCS11_PROVIDER_VERSION="1.3.0"
+ARG PKCS11_PROVIDER_CHECKSUM="0d1b21059cd21d159b1cad2082481ba6799fad42aa2465a5e80568448e651d71"
+
+USER root
+WORKDIR /build/
+
+RUN apk update \
+    && apk add build-base curl meson ninja pkgconf openssl-dev p11-kit-dev
+
+RUN curl -fsSL -o /build/pkcs11-provider.tar.gz \
+        "https://github.com/latchset/pkcs11-provider/archive/refs/tags/v${PKCS11_PROVIDER_VERSION}.tar.gz" \
+    && echo "${PKCS11_PROVIDER_CHECKSUM}  /build/pkcs11-provider.tar.gz" | sha256sum -c - \
+    && tar xf pkcs11-provider.tar.gz \
+    && cd "pkcs11-provider-${PKCS11_PROVIDER_VERSION}" \
+    && meson setup build --prefix=/usr \
+    && meson compile -C build \
+    && DESTDIR=/out meson install -C build
+
+# --------------------------------------------------------------------------
+# Stage 2: layer all tools onto the Signum agent image
+# --------------------------------------------------------------------------
 FROM repo.keyfactor.com/images/signum-agent:latest
 
 USER root
 WORKDIR /etc/keyfactor
 # Check the Cosign Release page for the latest releases https://github.com/sigstore/cosign/releases
 ARG COSIGN_VERSION="v2.2.4"
+# amd64 or arm64; BuildKit sets it from --platform, pass --build-arg TARGETARCH=arm64 with the legacy builder
+ARG TARGETARCH=amd64
 #Check for the latest release version at https://github.com/ebourg/jsign/releases
 ARG JSIGN_VERSION="6.0"
 
 # Add the cosign go binary (built with piv-pkcs11 support), to learn more about Cosign checkout https://github.com/sigstore/cosign
-RUN curl -LO --silent "https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-pivkey-pkcs11key-amd64"
+RUN curl -LO --silent "https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-pivkey-pkcs11key-${TARGETARCH}"
 
 #Jsign is a Java implementation of Microsoft's Authenticode check out the project at https://github.com/ebourg/jsign
 RUN curl -LO --silent "https://github.com/ebourg/jsign/releases/download/${JSIGN_VERSION}/jsign-${JSIGN_VERSION}.jar"
 
 # Java 17 and OpenSSL installation
+# openssl-4.0 must match the OpenSSL the PKCS#11 provider was built against
 #Configure Signum Provider
-RUN microdnf update -y && \
-    microdnf install java-17-openjdk-devel openssl openssl-pkcs11 opensc -y && \
-    microdnf clean all && \
-    rm -rf /var/cache/yum /var/cache/dnf && \
-    echo -e "name = SignumPKCS11\nlibrary = /usr/lib/libsignumpkcs11.so\ndescription = Keyfactor PKCS#11 interface for SmartCard" > /etc/keyfactor/signumpkcs11.cfg && \
+RUN apk update && \
+    apk add openjdk-17 openssl-4.0 && \
+    apk cache clean && \
+    rm -rf /var/cache/apk/* && \
+    printf "name = SignumPKCS11\nlibrary = /usr/lib/libsignumpkcs11.so\ndescription = Keyfactor PKCS#11 interface for SmartCard\n" > /etc/keyfactor/signumpkcs11.cfg && \
     echo "module:/usr/lib/libsignumpkcs11.so" > /usr/share/p11-kit/modules/keyfactor.module
 
+# pkcs11-tool (OpenSC) and the OpenSSL PKCS#11 provider
+COPY --from=opensc-builder /out/ /
+COPY --from=provider-builder /out/usr/lib/ossl-modules/pkcs11.so /usr/lib/ossl-modules/pkcs11.so
+
+# Load the provider with the Signum PKCS#11 library; OPENSSL_CONF makes it the default for every openssl call
+RUN printf '%s\n' \
+        'openssl_conf = openssl_init' \
+        '[openssl_init]' \
+        'providers = provider_sect' \
+        '[provider_sect]' \
+        'default = default_sect' \
+        'pkcs11 = pkcs11_sect' \
+        '[default_sect]' \
+        'activate = 1' \
+        '[pkcs11_sect]' \
+        'module = /usr/lib/ossl-modules/pkcs11.so' \
+        'pkcs11-module-path = /usr/lib/libsignumpkcs11.so' \
+        'activate = 1' > /etc/keyfactor/openssl-pkcs11.cnf
 
 RUN mkdir -p /opt/cosign/bin && \
-    mv /etc/keyfactor/cosign-linux-pivkey-pkcs11key-amd64 /opt/cosign/bin/cosign && \
+    mv /etc/keyfactor/cosign-linux-pivkey-pkcs11key-${TARGETARCH} /opt/cosign/bin/cosign && \
     chmod a+x /opt/cosign/bin/cosign && \
     chown -R 10001:0 /opt/cosign && \
     chgrp -R 0 /opt/cosign && \
     chmod -R g=u /opt/cosign
 
-ENV PATH="/opt/cosign/bin:${JAVA_HOME}/bin:${PATH}"
+ENV OPENSSL_CONF=/etc/keyfactor/openssl-pkcs11.cnf
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk
+ENV PATH="/opt/cosign/bin:/opt/opensc/bin:${JAVA_HOME}/bin:${PATH}"
 
 USER 10001

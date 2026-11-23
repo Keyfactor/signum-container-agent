@@ -1,13 +1,56 @@
+# --------------------------------------------------------------------------
+# Stage 1: build the OpenSSL PKCS#11 provider (no pkcs11-provider package for the Signum base image).
+# OpenSSL 4 removed ENGINE support, so the old `-engine pkcs11` (libp11) is not an option.
+# --------------------------------------------------------------------------
+FROM repo.keyfactor.com/images/signum-agent:latest AS builder
+
+ARG PKCS11_PROVIDER_VERSION="1.3.0"
+ARG PKCS11_PROVIDER_CHECKSUM="0d1b21059cd21d159b1cad2082481ba6799fad42aa2465a5e80568448e651d71"
+
+USER root
+WORKDIR /build/
+
+RUN apk update \
+    && apk add build-base curl meson ninja pkgconf openssl-dev p11-kit-dev
+
+RUN curl -fsSL -o /build/pkcs11-provider.tar.gz \
+        "https://github.com/latchset/pkcs11-provider/archive/refs/tags/v${PKCS11_PROVIDER_VERSION}.tar.gz" \
+    && echo "${PKCS11_PROVIDER_CHECKSUM}  /build/pkcs11-provider.tar.gz" | sha256sum -c - \
+    && tar xf pkcs11-provider.tar.gz \
+    && cd "pkcs11-provider-${PKCS11_PROVIDER_VERSION}" \
+    && meson setup build --prefix=/usr \
+    && meson compile -C build \
+    && DESTDIR=/out meson install -C build
+
+# --------------------------------------------------------------------------
+# Stage 2: layer OpenSSL and the provider onto the Signum agent image
+# --------------------------------------------------------------------------
 FROM repo.keyfactor.com/images/signum-agent:latest
 USER root
 WORKDIR /etc/keyfactor
 
-# OpenSSL Install
-# Configure OpenSSL
-RUN microdnf update -y && \
-    microdnf install openssl openssl-pkcs11 -y && \
-    microdnf clean all && \
-    rm -rf /var/cache/yum /var/cache/dnf && \
-    echo "module:/usr/lib/libsignumpkcs11.so" > /usr/share/p11-kit/modules/keyfactor.module
+# openssl-4.0 must match the OpenSSL the provider was built against
+RUN apk update \
+    && apk add openssl-4.0 \
+    && apk cache clean \
+    && rm -rf /var/cache/apk/*
+
+COPY --from=builder /out/usr/lib/ossl-modules/pkcs11.so /usr/lib/ossl-modules/pkcs11.so
+
+# Load the provider with the Signum PKCS#11 library; OPENSSL_CONF makes it the default for every openssl call
+RUN printf '%s\n' \
+        'openssl_conf = openssl_init' \
+        '[openssl_init]' \
+        'providers = provider_sect' \
+        '[provider_sect]' \
+        'default = default_sect' \
+        'pkcs11 = pkcs11_sect' \
+        '[default_sect]' \
+        'activate = 1' \
+        '[pkcs11_sect]' \
+        'module = /usr/lib/ossl-modules/pkcs11.so' \
+        'pkcs11-module-path = /usr/lib/libsignumpkcs11.so' \
+        'activate = 1' > /etc/keyfactor/openssl-pkcs11.cnf
+ENV OPENSSL_CONF=/etc/keyfactor/openssl-pkcs11.cnf
 
 USER 10001

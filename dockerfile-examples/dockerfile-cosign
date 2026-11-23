@@ -3,12 +3,14 @@ USER root
 WORKDIR /etc/keyfactor
 # Check the Cosign Release page for the latest releases https://github.com/sigstore/cosign/releases
 ARG COSIGN_VERSION="v2.2.4"
+# amd64 or arm64; BuildKit sets it from --platform, pass --build-arg TARGETARCH=arm64 with the legacy builder
+ARG TARGETARCH=amd64
 
 # Add the cosign go binary (built with piv-pkcs11 support), to learn more about Cosign checkout https://github.com/sigstore/cosign
-RUN curl -LO --silent "https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-pivkey-pkcs11key-amd64"
+RUN curl -LO --silent "https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-pivkey-pkcs11key-${TARGETARCH}"
 
 RUN mkdir -p /opt/cosign/bin && \
-    mv /etc/keyfactor/cosign-linux-pivkey-pkcs11key-amd64 /opt/cosign/bin/cosign && \
+    mv /etc/keyfactor/cosign-linux-pivkey-pkcs11key-${TARGETARCH} /opt/cosign/bin/cosign && \
     chmod a+x /opt/cosign/bin/cosign && \
     chown -R 10001:0 /opt/cosign && \
     chgrp -R 0 /opt/cosign && \

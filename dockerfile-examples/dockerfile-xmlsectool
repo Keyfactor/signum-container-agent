@@ -4,13 +4,13 @@ WORKDIR /etc/keyfactor
 
 # Java 17 installation
 #Configure Signum Provider
-RUN microdnf update -y && \
-    microdnf install java-17-openjdk-devel -y && \
+RUN apk update && \
+    apk add openjdk-17 && \
     curl -O https://shibboleth.net/downloads/tools/xmlsectool/3.0.0/xmlsectool-3.0.0-bin.zip && \
     unzip xmlsectool-3.0.0-bin.zip && \
-    microdnf clean all && \
-    rm -rf /var/cache/yum /var/cache/dnf && \
-    echo -e "name = SignumPKCS11\nlibrary = /usr/lib/libsignumpkcs11.so\ndescription = Keyfactor PKCS#11 interface for SmartCard" > /etc/keyfactor/signumpkcs11.cfg
+    apk cache clean && \
+    rm -rf /var/cache/apk/* && \
+    printf "name = SignumPKCS11\nlibrary = /usr/lib/libsignumpkcs11.so\ndescription = Keyfactor PKCS#11 interface for SmartCard\n" > /etc/keyfactor/signumpkcs11.cfg
 
 # Set PATH
 ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk
